@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BloodConnect – Network Graph UI</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --panel: #111; --card: #161616; --border: #2a2a2a;
+    --text: #e8e8e8; --muted: #888; --accent: #e11d48;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 220px; background: #000; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 10px; flex-shrink: 0; }
+  .logo { font-size: 1.15rem; font-weight: 700; color: #fff; }
+  .logo span { color: var(--accent); }
+  .logo-sub { font-size: 0.65rem; color: #555; margin: 4px 0 20px; }
+  .nav-btn { background: transparent; border: none; color: #999; text-align: left; padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; margin-bottom: 2px; width: 100%; }
+  .nav-btn:hover { background: #1a1a1a; color: #fff; }
+  .nav-btn.active { background: #1a1a1a; color: var(--accent); border-left: 3px solid var(--accent); }
+  .sidebar-footer { margin-top: auto; font-size: 0.65rem; color: #444; padding: 8px; }
+  .main { flex: 1; overflow-y: auto; padding: 20px 24px; background: var(--bg); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 16px; color: #fff; }
+  h1 .red { color: var(--accent); }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .stat-card .label { font-size: 0.7rem; color: var(--muted); margin-bottom: 4px; }
+  .stat-card .value { font-size: 1.4rem; font-weight: 700; color: #fff; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  .box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .box h3 { font-size: 0.85rem; margin-bottom: 10px; color: var(--muted); }
+  .mono { font-family: Consolas, monospace; font-size: 0.8rem; line-height: 1.5; color: #ccc; white-space: pre-wrap; }
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: auto; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { background: #0d0d0d; text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; white-space: nowrap; }
+  td { padding: 8px 11px; border-bottom: 1px solid #1a1a1a; color: #ddd; }
+  tr:hover td { background: #1a1a1a; }
+  tr.selected td { background: #1c1520 !important; }
+  tr { cursor: pointer; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .btn { border: 1px solid var(--border); background: #1a1a1a; color: #ddd; padding: 7px 13px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; }
+  .btn:hover { background: #252525; color: #fff; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #be123c; }
+  .btn.success { background: #14532d; border-color: #166534; color: #86efac; }
+  .btn.danger { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+  .badge.ok { background: #14532d; color: #86efac; }
+  .badge.em { background: #450a0a; color: #fca5a5; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #161616; border: 1px solid #333; border-radius: 10px; padding: 22px; width: min(400px, 92vw); }
+  .modal h2 { font-size: 1.05rem; margin-bottom: 14px; color: #fff; }
+  .form-row { margin-bottom: 11px; }
+  .form-row label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 3px; }
+  .form-row input, .form-row select, select { width: 100%; padding: 7px 9px; border: 1px solid #333; border-radius: 6px; font-size: 0.88rem; background: #0a0a0a; color: #eee; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 11px 16px; border-radius: 8px; font-size: 0.85rem; opacity: 0; transform: translateY(10px); transition: 0.25s; z-index: 200; max-width: 340px; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .path-box { background: #0a0a0a; border: 1px solid var(--border); border-radius: 6px; padding: 11px; font-family: monospace; font-size: 0.82rem; min-height: 42px; color: #aaa; }
+  #graphCanvasWrap { background: #000; border: 1px solid var(--border); border-radius: 8px; position: relative; height: 520px; overflow: hidden; }
+  #graphCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+  #graphCanvas:active { cursor: grabbing; }
+  .graph-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 0.78rem; color: #999; }
+  .graph-legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .graph-controls { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 5; }
+  .graph-controls button { background: #1a1a1a; border: 1px solid #333; color: #ccc; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.75rem; }
+  .graph-controls button:hover { background: #252525; color: #fff; }
+  #nodeInfo { position: absolute; bottom: 10px; left: 10px; background: rgba(20,20,20,0.92); border: 1px solid #333; border-radius: 6px; padding: 10px 14px; font-size: 0.8rem; color: #ccc; max-width: 280px; display: none; z-index: 5; }
+  #nodeInfo strong { color: #fff; }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="logo"><span>🩸</span> BloodConnect</div>
+  <div class="logo-sub">Emergency Response Platform</div>
+  <button class="nav-btn active" data-panel="dashboard">Dashboard</button>
+  <button class="nav-btn" data-panel="donors">Donors</button>
+  <button class="nav-btn" data-panel="hospitals">Hospitals</button>
+  <button class="nav-btn" data-panel="inventory">Blood Inventory</button>
+  <button class="nav-btn" data-panel="requests">Blood Requests</button>
+  <button class="nav-btn" data-panel="emergency">Emergency Response</button>
+  <button class="nav-btn" data-panel="graph">Network Graph</button>
+  <button class="nav-btn" data-panel="analytics">Graph Analytics</button>
+  <button class="nav-btn" data-panel="campaigns">Campaigns</button>
+  <button class="nav-btn" data-panel="audit">Audit Log</button>
+  <div class="sidebar-footer">v1.0 · Dark UI · Live Graph</div>
+</aside>
+<main class="main">
+  <div id="dashboard" class="panel active">
+    <h1>BloodConnect Dashboard</h1>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="two-col">
+      <div class="box"><h3>Critical Blood Groups</h3><div class="mono" id="criticalBox"></div></div>
+      <div class="box"><h3>Shortage Prediction</h3><div class="mono" id="predictBox"></div></div>
+    </div>
+    <div class="toolbar"><button class="btn primary" onclick="refreshDashboard()">↻ Refresh</button></div>
+  </div>
+  <div id="donors" class="panel">
+    <h1>Donor Management</h1>
+    <div class="toolbar">
+      <button class="btn primary" onclick="openModal('donorModal')">+ Register Donor</button>
+      <button class="btn" onclick="recordDonation()">Record Donation</button>
+      <button class="btn" onclick="bookAppointment()">Book Appointment</button>
+      <button class="btn" onclick="renderDonors()">↻ Refresh</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Group</th><th>Age</th><th>Eligible</th><th>Emergency</th><th>Reliability</th><th>Donations</th><th>Location</th></tr></thead><tbody id="donorTable"></tbody></table></div>
+  </div>
+  <div id="hospitals" class="panel">
+    <h1>Hospital Management</h1>
+    <div class="toolbar"><button class="btn primary" onclick="openModal('hospitalModal')">+ Register Hospital</button><button class="btn" onclick="renderHospitals()">↻ Refresh</button></div>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Location</th><th>Active</th></tr></thead><tbody id="hospitalTable"></tbody></table></div>
+  </div>
+  <div id="inventory" class="panel">
+    <h1>Blood Inventory</h1>
+    <div class="toolbar"><button class="btn primary" onclick="openModal('transferModal')">⇄ Transfer Blood</button><button class="btn" onclick="renderInventory()">↻ Refresh</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Bank ID</th><th>Name</th><th>O-</th><th>O+</th><th>A-</th><th>A+</th><th>B-</th><th>B+</th><th>AB-</th><th>AB+</th></tr></thead><tbody id="inventoryTable"></tbody></table></div>
+  </div>
+  <div id="requests" class="panel">
+    <h1>Blood Requests</h1>
+    <div class="toolbar">
+      <button class="btn primary" onclick="openModal('requestModal')">+ New Request</button>
+      <button class="btn" onclick="locateBlood()">Locate Blood</button>
+      <button class="btn success" onclick="fulfillRequest()">Fulfill from Bank</button>
+      <button class="btn" onclick="matchFromRequests()" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd">Match Donors</button>
+      <button class="btn" onclick="renderRequests()">↻ Refresh</button>
+    </div>
+    <p style="color:#666;font-size:0.78rem;margin-bottom:10px">Select any request (NORMAL / HIGH / CRITICAL / EMERGENCY), then Match Donors, Locate Blood, or Fulfill from Bank.</p>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Hospital</th><th>Group</th><th>Qty</th><th>Urgency</th><th>Status</th><th>Emergency</th></tr></thead><tbody id="requestTable"></tbody></table></div>
+  </div>
+  <div id="emergency" class="panel">
+    <h1><span class="red">●</span> Donor Matching (All Request Categories)</h1>
+    <div class="toolbar">
+      <button class="btn primary" onclick="matchDonors()">Match Donors</button>
+      <button class="btn success" onclick="simulateAccept()">Simulate Accept (Top Donor)</button>
+      <button class="btn" onclick="openManualMap()" style="background:#1e3a5f;border-color:#2563eb;color:#93c5fd">Manual Map Donor</button>
+      <button class="btn danger" onclick="sendAlerts()">Send Emergency Alerts</button>
+      <button class="btn" onclick="renderEmergency()">↻ Refresh</button>
+    </div>
+    <div class="box" style="margin-bottom:12px"><h3>All Active Requests (NORMAL → EMERGENCY)</h3>
+      <div class="table-wrap" style="border:none;margin:0"><table><thead><tr><th>ID</th><th>Hospital</th><th>Group</th><th>Qty</th><th>Urgency</th><th>Status</th></tr></thead><tbody id="emRequestTable"></tbody></table></div>
+    </div>
+    <div class="box"><h3>Ranked Eligible Donors</h3>
+      <div class="table-wrap" style="border:none;margin:0"><table><thead><tr><th>Rank</th><th>Donor</th><th>Group</th><th>Distance (km)</th><th>Score</th><th>Reliability</th><th>Eligible</th></tr></thead><tbody id="matchTable"></tbody></table></div>
+    </div>
+  </div>
+  <div id="graph" class="panel">
+    <h1>Network Graph — Entities & Relationships</h1>
+    <p style="color:#666;font-size:0.8rem;margin-bottom:10px">Directed <b style="color:#e11d48">weighted</b> graph — edge labels show relationship + weight (km). Line thickness ∝ weight. Drag nodes · Click for details · Scroll to zoom · Find Path uses Dijkstra on weights</p>
+    <div id="graphCanvasWrap">
+      <canvas id="graphCanvas"></canvas>
+      <div class="graph-controls">
+        <button onclick="resetGraphView()">Reset View</button>
+        <button onclick="layoutGraph()">Re-layout</button>
+        <button onclick="drawGraph()">Refresh</button>
+      </div>
+      <div id="nodeInfo"></div>
+    </div>
+    <div class="graph-legend">
+      <span><i class="dot" style="background:#e11d48"></i> Donor</span>
+      <span><i class="dot" style="background:#3b82f6"></i> Hospital</span>
+      <span><i class="dot" style="background:#22c55e"></i> Blood Bank</span>
+      <span><i class="dot" style="background:#f59e0b"></i> Request</span>
+      <span><i class="dot" style="background:#a855f7"></i> Campaign</span>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <h3>Shortest Path — Dijkstra on edge weights (km)</h3>
+      <div class="toolbar">
+        <select id="pathFrom" style="width:auto;min-width:140px"></select>
+        <span style="color:#666">→</span>
+        <select id="pathTo" style="width:auto;min-width:140px"></select>
+        <button class="btn primary" onclick="findPath()">Find Path</button>
+      </div>
+      <div class="path-box" id="pathResult">Select two nodes → Find Path runs Dijkstra on edge weights (distance km)</div>
+    </div>
+  </div>
+  <div id="analytics" class="panel">
+    <h1>Graph Analytics</h1>
+    <div class="toolbar"><button class="btn primary" onclick="runAnalytics()">Run Analysis</button></div>
+    <div class="box"><pre id="analyticsOut" class="mono" style="color:#e5e5e5;min-height:220px;white-space:pre-wrap;font-size:0.85rem;line-height:1.55;"></pre></div>
+  </div>
+  <div id="campaigns" class="panel">
+    <h1>Donation Campaign Manager</h1>
+    <div class="toolbar">
+      <button class="btn primary" onclick="openModal('campaignModal')">+ Create Campaign</button>
+      <button class="btn" onclick="smartRecommend()">Smart Recommendation</button>
+      <button class="btn" onclick="renderCampaigns()">↻ Refresh</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Bank</th><th>Status</th><th>Targets</th></tr></thead><tbody id="campaignTable"></tbody></table></div>
+  </div>
+  <div id="audit" class="panel">
+    <h1>Audit Log</h1>
+    <div class="toolbar"><button class="btn" onclick="renderAudit()">↻ Refresh</button></div>
+    <div class="box"><pre id="auditOut" class="mono"></pre></div>
+  </div>
+</main>
+<div class="modal-overlay" id="donorModal"><div class="modal"><h2>Register Donor</h2>
+  <div class="form-row"><label>Name</label><input id="dName" value="New Donor"></div>
+  <div class="form-row"><label>Blood Group</label><select id="dGroup"><option>O-</option><option>O+</option><option>A-</option><option>A+</option><option>B-</option><option>B+</option><option>AB-</option><option>AB+</option></select></div>
+  <div class="form-row"><label>Age</label><input id="dAge" type="number" value="25" min="18" max="65"></div>
+  <div class="form-row"><label>Location</label><input id="dLoc" value="Chennai"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('donorModal')">Cancel</button><button class="btn primary" onclick="addDonor()">Register</button></div>
+</div></div>
+<div class="modal-overlay" id="hospitalModal"><div class="modal"><h2>Register Hospital</h2>
+  <div class="form-row"><label>Name</label><input id="hName" value="New Hospital"></div>
+  <div class="form-row"><label>Location</label><input id="hLoc" value="Chennai"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('hospitalModal')">Cancel</button><button class="btn primary" onclick="addHospital()">Register</button></div>
+</div></div>
+<div class="modal-overlay" id="requestModal"><div class="modal"><h2>New Blood Request</h2>
+  <div class="form-row"><label>Hospital</label><select id="rHospital"></select></div>
+  <div class="form-row"><label>Blood Group</label><select id="rGroup"><option>O-</option><option>O+</option><option>A-</option><option>A+</option><option>B-</option><option>B+</option><option>AB-</option><option>AB+</option></select></div>
+  <div class="form-row"><label>Quantity</label><input id="rQty" type="number" value="2" min="1" max="20"></div>
+  <div class="form-row"><label>Urgency</label><select id="rUrgency"><option>NORMAL</option><option>HIGH</option><option>CRITICAL</option><option selected>EMERGENCY</option></select></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('requestModal')">Cancel</button><button class="btn primary" onclick="addRequest()">Create</button></div>
+</div></div>
+<div class="modal-overlay" id="transferModal"><div class="modal"><h2>Transfer Blood</h2>
+  <div class="form-row"><label>From Bank</label><select id="tFrom"></select></div>
+  <div class="form-row"><label>To Bank</label><select id="tTo"></select></div>
+  <div class="form-row"><label>Blood Group</label><select id="tGroup"><option>O-</option><option>O+</option><option>A-</option><option>A+</option><option>B-</option><option>B+</option><option>AB-</option><option>AB+</option></select></div>
+  <div class="form-row"><label>Quantity</label><input id="tQty" type="number" value="1" min="1" max="20"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('transferModal')">Cancel</button><button class="btn primary" onclick="doTransfer()">Transfer</button></div>
+</div></div>
+<div class="modal-overlay" id="campaignModal"><div class="modal"><h2>Create Campaign</h2>
+  <div class="form-row"><label>Name</label><input id="cName" value="Community Drive"></div>
+  <div class="form-row"><label>Blood Bank</label><select id="cBank"></select></div>
+  <div class="form-row"><label>Target Group</label><select id="cGroup"><option>O-</option><option>AB-</option><option>A-</option><option>B-</option></select></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('campaignModal')">Cancel</button><button class="btn primary" onclick="addCampaign()">Create</button></div>
+</div></div>
+
+<div class="modal-overlay" id="manualMapModal"><div class="modal">
+  <h2>Manual Map Donor → Request</h2>
+  <p style="color:#888;font-size:0.8rem;margin-bottom:12px">Select any eligible compatible donor for the selected emergency request (bypasses ranking).</p>
+  <div class="form-row"><label>Emergency Request</label><input id="mmRequest" readonly style="color:#aaa"></div>
+  <div class="form-row"><label>Choose Donor</label><select id="mmDonor"></select></div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeModal('manualMapModal')">Cancel</button>
+    <button class="btn primary" onclick="confirmManualMap()">Map Donor</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<script>
+
+const GROUPS = ['O-','O+','A-','A+','B-','B+','AB-','AB+'];
+let idCounter = 1100;
+function nextId(p){ return p + (++idCounter); }
+const donors = [
+  {id:'D1007', name:'Arun Kumar', group:'O-', age:24, eligible:true, emergency:true, reliability:95, donations:0, location:'Adyar', lat:13.0067, lon:80.2570},
+  {id:'D1008', name:'Karthik R', group:'O-', age:28, eligible:true, emergency:true, reliability:87, donations:0, location:'Velachery', lat:12.9750, lon:80.2210},
+  {id:'D1009', name:'Rahul S', group:'O+', age:22, eligible:true, emergency:true, reliability:72, donations:0, location:'Anna Nagar', lat:13.0850, lon:80.2100},
+  {id:'D1010', name:'Priya M', group:'A+', age:26, eligible:true, emergency:true, reliability:70, donations:0, location:'Mylapore', lat:13.0330, lon:80.2690},
+  {id:'D1011', name:'Suresh B', group:'B+', age:31, eligible:true, emergency:true, reliability:70, donations:0, location:'Tambaram', lat:12.9249, lon:80.1000},
+  {id:'D1012', name:'Meena K', group:'AB-', age:29, eligible:true, emergency:true, reliability:90, donations:0, location:'Porur', lat:13.0370, lon:80.1560},
+  {id:'D1013', name:'Vikram P', group:'A-', age:27, eligible:true, emergency:true, reliability:70, donations:0, location:'Guindy', lat:13.0069, lon:80.2200},
+  {id:'D1014', name:'Anitha L', group:'B-', age:23, eligible:true, emergency:true, reliability:70, donations:0, location:'Kodambakkam', lat:13.0520, lon:80.2300},
+];
+const hospitals = [
+  {id:'H1004', name:'City Hospital', location:'T Nagar, Chennai', active:true, lat:13.0418, lon:80.2341},
+  {id:'H1005', name:'Apollo Main Hospital', location:'Greams Road', active:true, lat:13.0605, lon:80.2500},
+  {id:'H1006', name:'Government General Hospital', location:'Park Town', active:true, lat:13.0810, lon:80.2750},
+];
+const banks = [
+  {id:'B1001', name:'Chennai Central Blood Bank', location:'Chennai Central', stock:{'O-':4,'O+':25,'A-':3,'A+':18,'B-':2,'B+':12,'AB-':1,'AB+':8}, lat:13.0827, lon:80.2707},
+  {id:'B1002', name:'Apollo Blood Centre', location:'Greams Road', stock:{'O-':2,'O+':15,'A-':0,'A+':10,'B-':0,'B+':9,'AB-':0,'AB+':0}, lat:13.0604, lon:80.2496},
+  {id:'B1003', name:'Stanley Medical Bank', location:'Old Jail Road', stock:{'O-':1,'O+':20,'A-':0,'A+':14,'B-':0,'B+':11,'AB-':0,'AB+':0}, lat:13.1067, lon:80.2840},
+];
+const requests = [{id:'R1017', hospitalId:'H1004', group:'O-', qty:2, urgency:'EMERGENCY', status:'SEARCHING', emergency:true}];
+const campaigns = [{id:'C1018', name:'College O- Drive', bankId:'B1001', status:'ACTIVE', targets:['O-','AB-']}];
+const edges = [
+  {from:'H1004', rel:'CONNECTED_TO', to:'B1001', w:6.0},
+  {from:'H1004', rel:'CONNECTED_TO', to:'B1002', w:2.7},
+  {from:'H1005', rel:'CONNECTED_TO', to:'B1002', w:0.5},
+  {from:'H1005', rel:'CONNECTED_TO', to:'B1001', w:3.9},
+  {from:'H1006', rel:'CONNECTED_TO', to:'B1003', w:3.2},
+  {from:'H1006', rel:'CONNECTED_TO', to:'B1001', w:2.1},
+  {from:'H1004', rel:'CREATED', to:'R1017', w:0},
+  {from:'C1018', rel:'HELD_AT', to:'B1001', w:0},
+  {from:'D1007', rel:'NEAR', to:'H1004', w:4.6},
+  {from:'D1008', rel:'NEAR', to:'H1004', w:7.6},
+  {from:'D1009', rel:'NEAR', to:'H1005', w:5.0},
+  {from:'D1012', rel:'NEAR', to:'B1001', w:8.0},
+];
+const TYPE_COLOR = {DONOR:'#e11d48', HOSPITAL:'#3b82f6', BLOOD_BANK:'#22c55e', EMERGENCY_REQUEST:'#f59e0b', BLOOD_REQUEST:'#f59e0b', CAMPAIGN:'#a855f7', OTHER:'#06b6d4'};
+let gNodes = [];
+let highlightPath = new Set();
+let highlightPathEdges = new Set();
+let lastPathWeight = 0;
+function nTypeRadius(n){
+  if(!n) return 14;
+  return (n.type==='BLOOD_BANK' || n.type==='HOSPITAL') ? 18 : 14;
+}
+function rebuildNodes(){
+  gNodes = [];
+  donors.forEach(d => gNodes.push({id:d.id, type:'DONOR', label:d.name, data:d}));
+  hospitals.forEach(h => gNodes.push({id:h.id, type:'HOSPITAL', label:h.name, data:h}));
+  banks.forEach(b => gNodes.push({id:b.id, type:'BLOOD_BANK', label:b.name, data:b}));
+  requests.forEach(r => gNodes.push({id:r.id, type:r.emergency?'EMERGENCY_REQUEST':'BLOOD_REQUEST', label:r.group+' x'+r.qty, data:r}));
+  campaigns.forEach(c => gNodes.push({id:c.id, type:'CAMPAIGN', label:c.name, data:c}));
+}
+function layoutGraph(){
+  const W = 900, H = 480;
+  const byType = {};
+  gNodes.forEach(n => { (byType[n.type]=byType[n.type]||[]).push(n); });
+  const centers = {
+    BLOOD_BANK: [W*0.5, H*0.32], HOSPITAL: [W*0.22, H*0.55], DONOR: [W*0.78, H*0.55],
+    EMERGENCY_REQUEST: [W*0.35, H*0.18], BLOOD_REQUEST: [W*0.35, H*0.18], CAMPAIGN: [W*0.65, H*0.18]
+  };
+  Object.keys(byType).forEach(t => {
+    const list = byType[t]; const c = centers[t] || [W/2, H/2]; const n = list.length;
+    list.forEach((node, i) => {
+      const angle = (i / Math.max(n,1)) * Math.PI * 2 - Math.PI/2;
+      const r = 50 + n * 14;
+      node.x = c[0] + Math.cos(angle) * r + (Math.random()-0.5)*15;
+      node.y = c[1] + Math.sin(angle) * r + (Math.random()-0.5)*15;
+      node.vx = 0; node.vy = 0;
+    });
+  });
+  for(let iter=0; iter<100; iter++){
+    for(let i=0;i<gNodes.length;i++){
+      for(let j=i+1;j<gNodes.length;j++){
+        const a=gNodes[i], b=gNodes[j];
+        let dx=b.x-a.x, dy=b.y-a.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+        const force = 900/(dist*dist);
+        a.vx -= dx/dist*force; a.vy -= dy/dist*force;
+        b.vx += dx/dist*force; b.vy += dy/dist*force;
+      }
+    }
+    edges.forEach(e=>{
+      const a=gNodes.find(n=>n.id===e.from), b=gNodes.find(n=>n.id===e.to);
+      if(!a||!b) return;
+      let dx=b.x-a.x, dy=b.y-a.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+      const force=(dist-130)*0.025;
+      a.vx += dx/dist*force; a.vy += dy/dist*force;
+      b.vx -= dx/dist*force; b.vy -= dy/dist*force;
+    });
+    gNodes.forEach(n=>{
+      n.x += n.vx*0.35; n.y += n.vy*0.35; n.vx *= 0.55; n.vy *= 0.55;
+      n.x = Math.max(40, Math.min(W-40, n.x)); n.y = Math.max(40, Math.min(H-40, n.y));
+    });
+  }
+  drawGraph();
+}
+let canvas, ctx, scale=1, offsetX=0, offsetY=0, dragNode=null, panStart=null, selectedNodeId=null;
+function initCanvas(){
+  canvas = document.getElementById('graphCanvas');
+  if(!canvas) return;
+  const wrap = document.getElementById('graphCanvasWrap');
+  const ww = Math.max(wrap.clientWidth || 0, 600);
+  const hh = Math.max(wrap.clientHeight || 0, 420);
+  canvas.width = ww; canvas.height = hh;
+  ctx = canvas.getContext('2d');
+  canvas.onmousedown = e => {
+    const p = screenToWorld(e.offsetX, e.offsetY);
+    const hit = hitNode(p.x, p.y);
+    if(hit){ dragNode = hit; selectedNodeId = hit.id; showNodeInfo(hit); }
+    else { panStart = {x:e.offsetX, y:e.offsetY, ox:offsetX, oy:offsetY}; selectedNodeId = null; document.getElementById('nodeInfo').style.display='none'; }
+    drawGraph();
+  };
+  canvas.onmousemove = e => {
+    if(dragNode){ const p = screenToWorld(e.offsetX, e.offsetY); dragNode.x = p.x; dragNode.y = p.y; drawGraph(); }
+    else if(panStart){ offsetX = panStart.ox + (e.offsetX - panStart.x); offsetY = panStart.oy + (e.offsetY - panStart.y); drawGraph(); }
+  };
+  canvas.onmouseup = () => { dragNode=null; panStart=null; };
+  canvas.onmouseleave = () => { dragNode=null; panStart=null; };
+  canvas.onwheel = e => { e.preventDefault(); scale = Math.max(0.4, Math.min(2.5, scale * (e.deltaY > 0 ? 0.9 : 1.1))); drawGraph(); };
+}
+function screenToWorld(sx, sy){ return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale }; }
+function hitNode(wx, wy){
+  for(let i=gNodes.length-1;i>=0;i--){
+    const n=gNodes[i], r = (n.type==='BLOOD_BANK'||n.type==='HOSPITAL') ? 18 : 14;
+    const dx=wx-n.x, dy=wy-n.y; if(dx*dx+dy*dy < r*r) return n;
+  }
+  return null;
+}
+function showNodeInfo(n){
+  const el = document.getElementById('nodeInfo');
+  let extra = '';
+  if(n.type==='DONOR') extra = 'Group: '+n.data.group+'<br>Reliability: '+n.data.reliability+'%<br>Location: '+n.data.location;
+  if(n.type==='HOSPITAL') extra = 'Location: '+n.data.location;
+  if(n.type==='BLOOD_BANK') extra = GROUPS.map(g=>g+':'+(n.data.stock[g]||0)).join(' ');
+  if(n.type.includes('REQUEST')) extra = 'Status: '+n.data.status+'<br>Urgency: '+n.data.urgency;
+  el.innerHTML = '<strong>'+n.id+'</strong> · '+n.type+'<br>'+n.label+'<br>'+extra;
+  el.style.display = 'block';
+}
+function drawGraph(){
+  if(!ctx || !canvas) return;
+  if(!gNodes.length){ rebuildNodes(); if(gNodes.length && gNodes[0].x==null) layoutGraph(); }
+  const W = canvas.width, H = canvas.height;
+  if(W < 10 || H < 10) return;
+  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+  ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+  // Directed weighted edges
+  edges.forEach(e => {
+    const a = gNodes.find(n=>n.id===e.from), b = gNodes.find(n=>n.id===e.to);
+    if(!a||!b||a.x==null||b.x==null) return;
+    const onPath = highlightPathEdges.has(e.from+'->'+e.to) || (highlightPath.has(e.from) && highlightPath.has(e.to));
+    const w = (typeof e.w === 'number') ? e.w : 0;
+    // thickness: heavier weight = thicker line (capped)
+    const baseW = onPath ? 2.8 : 1.0;
+    const thick = baseW + Math.min(3.5, w * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = onPath ? '#e11d48' : (w > 0 ? '#4b5563' : '#2a2a2a');
+    ctx.lineWidth = thick / scale;
+    ctx.stroke();
+    // arrow head (directed)
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const ar = (nTypeRadius(b) + 6);
+    const ax = b.x - Math.cos(ang) * ar;
+    const ay = b.y - Math.sin(ang) * ar;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - 10/scale*Math.cos(ang-0.4), ay - 10/scale*Math.sin(ang-0.4));
+    ctx.lineTo(ax - 10/scale*Math.cos(ang+0.4), ay - 10/scale*Math.sin(ang+0.4));
+    ctx.closePath();
+    ctx.fillStyle = onPath ? '#e11d48' : '#6b7280';
+    ctx.fill();
+    // label: relationship + weight
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const label = w > 0 ? (e.rel + '  w=' + w.toFixed(1)) : e.rel;
+    ctx.font = (onPath ? 'bold ' : '') + (9/scale) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000';
+    const tw = ctx.measureText(label).width;
+    ctx.fillRect(mx - tw/2 - 3/scale, my - 12/scale, tw + 6/scale, 12/scale);
+    ctx.fillStyle = onPath ? '#fca5a5' : '#9ca3af';
+    ctx.fillText(label, mx, my - 3/scale);
+  });
+  gNodes.forEach(n => {
+    const r = (n.type==='BLOOD_BANK'||n.type==='HOSPITAL') ? 18 : 14;
+    const color = TYPE_COLOR[n.type] || TYPE_COLOR.OTHER;
+    const selected = n.id === selectedNodeId, onPath = highlightPath.has(n.id);
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = selected || onPath ? '#fff' : '#111'; ctx.lineWidth = (selected || onPath ? 3 : 1.5) / scale; ctx.stroke();
+    ctx.fillStyle = '#eee'; ctx.font = 'bold '+(10/scale)+'px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(n.id, n.x, n.y + r + 12/scale);
+    ctx.fillStyle = '#888'; ctx.font = (9/scale)+'px sans-serif';
+    const short = n.label.length > 16 ? n.label.slice(0,14)+'…' : n.label;
+    ctx.fillText(short, n.x, n.y + r + 22/scale);
+  });
+}
+function resetGraphView(){ scale = 1; offsetX = 0; offsetY = 0; drawGraph(); }
+const audit = [];
+function log(msg){ audit.push(new Date().toISOString().replace('T',' ').substring(0,19)+' | '+msg); }
+log('System seeded: banks, hospitals, donors, emergency request');
+const canDonate = {'O-':['O-','O+','A-','A+','B-','B+','AB-','AB+'],'O+':['O+','A+','B+','AB+'],'A-':['A-','A+','AB-','AB+'],'A+':['A+','AB+'],'B-':['B-','B+','AB-','AB+'],'B+':['B+','AB+'],'AB-':['AB-','AB+'],'AB+':['AB+']};
+function dist(lat1,lon1,lat2,lon2){ const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180; const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+function totalUnits(){ let t=0; banks.forEach(b=>GROUPS.forEach(g=>t+=(b.stock[g]||0))); return t; }
+function systemStock(){ const s={}; GROUPS.forEach(g=>s[g]=0); banks.forEach(b=>GROUPS.forEach(g=>s[g]+=(b.stock[g]||0))); return s; }
+function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2800); }
+function openModal(id){
+  if(id==='requestModal') document.getElementById('rHospital').innerHTML=hospitals.map(h=>'<option value="'+h.id+'">'+h.name+'</option>').join('');
+  if(id==='transferModal'){ document.getElementById('tFrom').innerHTML=banks.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join(''); document.getElementById('tTo').innerHTML=banks.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join(''); }
+  if(id==='campaignModal') document.getElementById('cBank').innerHTML=banks.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join('');
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+let selectedDonor=null, selectedRequest=null, selectedEmRequest=null;
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById(btn.dataset.panel).classList.add('active');
+    const p=btn.dataset.panel;
+    if(p==='dashboard') refreshDashboard();
+    if(p==='donors') renderDonors();
+    if(p==='hospitals') renderHospitals();
+    if(p==='inventory') renderInventory();
+    if(p==='requests') renderRequests();
+    if(p==='emergency') renderEmergency();
+    if(p==='graph'){ setTimeout(()=>{ initCanvas(); rebuildNodes(); layoutGraph(); fillPathSelects(); }, 80); }
+    if(p==='analytics') runAnalytics();
+    if(p==='campaigns') renderCampaigns();
+    if(p==='audit') renderAudit();
+  });
+});
+function refreshDashboard(){
+  const inv=systemStock(); rebuildNodes();
+  document.getElementById('statsGrid').innerHTML=
+    '<div class="stat-card"><div class="label">Total Donors</div><div class="value">'+donors.length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Eligible</div><div class="value">'+donors.filter(d=>d.eligible).length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Hospitals</div><div class="value">'+hospitals.length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Blood Units</div><div class="value">'+totalUnits()+'</div></div>'+
+    '<div class="stat-card"><div class="label">Pending</div><div class="value">'+requests.filter(r=>r.status==='PENDING'||r.status==='SEARCHING').length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Emergency</div><div class="value">'+requests.filter(r=>r.emergency).length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Graph Nodes</div><div class="value">'+gNodes.length+'</div></div>'+
+    '<div class="stat-card"><div class="label">Graph Edges</div><div class="value">'+edges.length+'</div></div>';
+  let crit=''; GROUPS.forEach(g=>{ const n=inv[g]; let bar=''; for(let i=0;i<10;i++) bar+=i<Math.min(10,n)?'█':'░'; crit+=g.padEnd(4)+' '+bar+' '+String(n).padStart(3)+(n<=2?' CRITICAL':n<=5?' LOW':' OK')+'\n'; });
+  document.getElementById('criticalBox').textContent=crit;
+  let pred=''; GROUPS.forEach(g=>{ const n=inv[g]; pred+=g.padEnd(4)+' → '+(n<=2?'~2 days':n<=5?'Low stock':'Healthy')+'\n'; });
+  document.getElementById('predictBox').textContent=pred;
+}
+function renderDonors(){ document.getElementById('donorTable').innerHTML=donors.map(d=>'<tr class="'+(selectedDonor===d.id?'selected':'')+'" onclick="selectedDonor=\''+d.id+'\';renderDonors()"><td>'+d.id+'</td><td>'+d.name+'</td><td>'+d.group+'</td><td>'+d.age+'</td><td>'+(d.eligible?'Yes':'No')+'</td><td>'+(d.emergency?'Yes':'No')+'</td><td>'+d.reliability+'%</td><td>'+d.donations+'</td><td>'+d.location+'</td></tr>').join(''); }
+function renderHospitals(){ document.getElementById('hospitalTable').innerHTML=hospitals.map(h=>'<tr><td>'+h.id+'</td><td>'+h.name+'</td><td>'+h.location+'</td><td>'+(h.active?'Yes':'No')+'</td></tr>').join(''); }
+function renderInventory(){ document.getElementById('inventoryTable').innerHTML=banks.map(b=>'<tr><td>'+b.id+'</td><td>'+b.name+'</td>'+GROUPS.map(g=>'<td>'+(b.stock[g]||0)+'</td>').join('')+'</tr>').join(''); }
+function renderRequests(){ document.getElementById('requestTable').innerHTML=requests.map(r=>{ const h=hospitals.find(x=>x.id===r.hospitalId); return '<tr class="'+(selectedRequest===r.id?'selected':'')+'" onclick="selectedRequest=\''+r.id+'\';renderRequests()"><td>'+r.id+'</td><td>'+(h?h.name:r.hospitalId)+'</td><td>'+r.group+'</td><td>'+r.qty+'</td><td>'+r.urgency+'</td><td>'+r.status+'</td><td>'+(r.emergency?'YES':'No')+'</td></tr>'; }).join(''); }
+function renderEmergency(){
+  const em=requests.filter(r=>r.status!=='FULFILLED'&&r.status!=='CANCELLED');
+  document.getElementById('emRequestTable').innerHTML=em.map(r=>{
+    const h=hospitals.find(x=>x.id===r.hospitalId);
+    const badge = (r.urgency==='EMERGENCY'||r.urgency==='CRITICAL') ? 'em' : 'ok';
+    return '<tr class="'+(selectedEmRequest===r.id?'selected':'')+'" onclick="selectedEmRequest=\''+r.id+'\';selectedRequest=\''+r.id+'\';renderEmergency()"><td>'+r.id+'</td><td>'+(h?h.name:r.hospitalId)+'</td><td>'+r.group+'</td><td>'+r.qty+'</td><td><span class="badge '+badge+'">'+r.urgency+'</span></td><td>'+r.status+'</td></tr>';
+  }).join('');
+}
+function fillPathSelects(){ rebuildNodes(); const opts=gNodes.map(n=>'<option value="'+n.id+'">'+n.id+' ('+n.type+')</option>').join(''); document.getElementById('pathFrom').innerHTML=opts; document.getElementById('pathTo').innerHTML=opts; }
+function renderCampaigns(){ document.getElementById('campaignTable').innerHTML=campaigns.map(c=>{ const b=banks.find(x=>x.id===c.bankId); return '<tr><td>'+c.id+'</td><td>'+c.name+'</td><td>'+(b?b.name:c.bankId)+'</td><td>'+c.status+'</td><td>'+c.targets.join(', ')+'</td></tr>'; }).join(''); }
+function renderAudit(){ document.getElementById('auditOut').textContent=audit.join('\n')||'(empty)'; }
+function runAnalytics(){
+  try {
+    rebuildNodes();
+    const inv = systemStock();
+    let out = '';
+    out += '════════════════════════════════════════\n';
+    out += '       BLOODCONNECT GRAPH ANALYTICS\n';
+    out += '════════════════════════════════════════\n\n';
+    out += 'Total Nodes     : ' + gNodes.length + '\n';
+    out += 'Total Edges     : ' + edges.length + '\n';
+    out += 'Donors          : ' + donors.length + '\n';
+    out += 'Hospitals       : ' + hospitals.length + '\n';
+    out += 'Blood Banks     : ' + banks.length + '\n';
+    out += 'Requests        : ' + requests.length + '\n';
+    out += 'Campaigns       : ' + campaigns.length + '\n\n';
+    out += '── Nodes by Type ──\n';
+    const typeCount = {};
+    gNodes.forEach(n => { typeCount[n.type] = (typeCount[n.type]||0)+1; });
+    Object.keys(typeCount).forEach(t => { out += '  ' + t + ': ' + typeCount[t] + '\n'; });
+    out += '\n── System Inventory ──\n';
+    GROUPS.forEach(g => {
+      const n = inv[g] || 0;
+      const bar = '█'.repeat(Math.min(15, n)) + '░'.repeat(Math.max(0, 15 - Math.min(15, n)));
+      out += '  ' + (g + '    ').slice(0, 4) + ' ' + bar + ' ' + n + '\n';
+    });
+    out += '\n── Critical Groups (≤ 5 units) ──\n';
+    const crit = GROUPS.filter(g => (inv[g]||0) <= 5);
+    out += crit.length ? ('  ' + crit.join(', ') + '\n') : '  None\n';
+    out += '\n── Most Connected (by edge count) ──\n';
+    const deg = {};
+    edges.forEach(e => {
+      deg[e.from] = (deg[e.from]||0)+1;
+      deg[e.to] = (deg[e.to]||0)+1;
+    });
+    Object.entries(deg).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([id,d]) => {
+      const node = gNodes.find(n => n.id === id);
+      out += '  ' + id + ' (' + (node ? node.type : '?') + ') degree=' + d + '\n';
+    });
+    out += '\n── Top Donors by Reliability ──\n';
+    [...donors].sort((a,b)=>b.reliability-a.reliability).slice(0,5).forEach(d => {
+      out += '  ' + d.name + ' (' + d.group + ') ' + d.reliability + '%  donations=' + d.donations + '\n';
+    });
+    out += '\n── Relationship Types in Graph ──\n';
+    const rels = {};
+    edges.forEach(e => { rels[e.rel] = (rels[e.rel]||0)+1; });
+    Object.entries(rels).forEach(([r,c]) => { out += '  ' + r + ': ' + c + '\n'; });
+    const el = document.getElementById('analyticsOut');
+    if (el) {
+      el.textContent = out;
+      el.style.color = '#e5e5e5';
+      el.style.minHeight = '200px';
+      el.style.display = 'block';
+    }
+    toast('Analytics updated');
+  } catch (err) {
+    console.error(err);
+    const el = document.getElementById('analyticsOut');
+    if (el) el.textContent = 'Error running analytics: ' + err.message;
+    toast('Analytics error');
+  }
+}
+function addDonor(){ const d={id:nextId('D'), name:document.getElementById('dName').value, group:document.getElementById('dGroup').value, age:+document.getElementById('dAge').value, eligible:true, emergency:true, reliability:70, donations:0, location:document.getElementById('dLoc').value, lat:13+Math.random()*0.12, lon:80.15+Math.random()*0.15}; donors.push(d); log('Registered donor '+d.id); closeModal('donorModal'); renderDonors(); toast('Donor registered'); }
+function addHospital(){ const h={id:nextId('H'), name:document.getElementById('hName').value, location:document.getElementById('hLoc').value, active:true, lat:13+Math.random()*0.1, lon:80.2+Math.random()*0.1}; hospitals.push(h); log('Registered hospital '+h.id); closeModal('hospitalModal'); renderHospitals(); toast('Hospital registered'); }
+function addRequest(){ const urg=document.getElementById('rUrgency').value; const r={id:nextId('R'), hospitalId:document.getElementById('rHospital').value, group:document.getElementById('rGroup').value, qty:+document.getElementById('rQty').value, urgency:urg, status:(urg==='EMERGENCY'||urg==='CRITICAL')?'SEARCHING':'PENDING', emergency:urg==='EMERGENCY'||urg==='CRITICAL'}; requests.push(r); edges.push({from:r.hospitalId, rel:'CREATED', to:r.id, w:0}); log('Created request '+r.id); closeModal('requestModal'); renderRequests(); toast('Request created'); }
+function recordDonation(){ if(!selectedDonor){ toast('Select a donor'); return; } const d=donors.find(x=>x.id===selectedDonor); if(!d||!d.eligible){ toast('Not eligible'); return; } d.donations++; d.eligible=false; banks[0].stock[d.group]=(banks[0].stock[d.group]||0)+1; edges.push({from:d.id, rel:'DONATED', to:banks[0].id, w:0}); log('Donation by '+d.id); renderDonors(); toast('Donation recorded'); }
+function bookAppointment(){ if(!selectedDonor){ toast('Select a donor'); return; } log('Appointment for '+selectedDonor); toast('Appointment booked'); }
+function locateBlood(){ if(!selectedRequest){ toast('Select a request'); return; } const r=requests.find(x=>x.id===selectedRequest); const h=hospitals.find(x=>x.id===r.hospitalId); const matches=banks.filter(b=>(b.stock[r.group]||0)>=1).map(b=>({bank:b, dist:dist(h.lat,h.lon,b.lat,b.lon), units:b.stock[r.group]})).sort((a,b)=>a.dist-b.dist); alert(matches.length?matches.map(m=>m.bank.name+' | '+m.dist.toFixed(1)+' km | '+m.units+' units').join('\n'):'No stock'); }
+function fulfillRequest(){ if(!selectedRequest){ toast('Select a request'); return; } const r=requests.find(x=>x.id===selectedRequest); const h=hospitals.find(x=>x.id===r.hospitalId); const match=banks.filter(b=>(b.stock[r.group]||0)>=1).map(b=>({bank:b, dist:dist(h.lat,h.lon,b.lat,b.lon)})).sort((a,b)=>a.dist-b.dist)[0]; if(!match){ toast('No stock'); return; } const units=Math.min(r.qty, match.bank.stock[r.group]); match.bank.stock[r.group]-=units; r.status=units>=r.qty?'FULFILLED':'PARTIALLY_FULFILLED'; edges.push({from:match.bank.id, rel:'RECEIVES', to:r.id, w:0}); log('Fulfilled '+r.id); renderRequests(); toast('Fulfilled '+units+' units'); }
+function matchDonors(){ const rid=selectedEmRequest||selectedRequest; if(!rid){ toast('Select a request first'); return; } const r=requests.find(x=>x.id===rid); if(!r){ toast('Request not found'); return; } selectedEmRequest=rid; selectedRequest=rid; const h=hospitals.find(x=>x.id===r.hospitalId); const matches=donors.filter(d=>d.eligible&&d.emergency&&(canDonate[d.group]||[]).includes(r.group)).map(d=>{ const distance=dist(d.lat,d.lon,h.lat,h.lon); const score=Math.max(0,100-distance*5)*0.4+d.reliability*0.4+30; return {d, distance, score}; }).sort((a,b)=>b.score-a.score); document.getElementById('matchTable').innerHTML=matches.map((m,i)=>'<tr><td>'+(i+1)+'</td><td>'+m.d.name+' ('+m.d.id+')</td><td>'+m.d.group+'</td><td>'+m.distance.toFixed(1)+'</td><td>'+m.score.toFixed(1)+'</td><td>'+m.d.reliability+'%</td><td><span class="badge ok">Yes</span></td></tr>').join(''); window._lastMatches=matches; toast(matches.length?'Donors ranked':'No matches'); }
+function simulateAccept(){ if(!window._lastMatches||!window._lastMatches.length){ toast('Match donors first'); return; } const rid=selectedEmRequest||selectedRequest; if(!rid){ toast('Select request'); return; } const top=window._lastMatches[0]; const r=requests.find(x=>x.id===rid); r.status='MATCHED'; edges.push({from:top.d.id, rel:'ACCEPTED', to:r.id, w:0}); log('Donor '+top.d.id+' accepted '+r.id); renderEmergency(); toast(top.d.name+' accepted'); }
+function sendAlerts(){ if(!window._lastMatches||!window._lastMatches.length){ toast('Match donors first'); return; } const rid=selectedEmRequest||selectedRequest; const r=requests.find(x=>x.id===rid); const h=hospitals.find(x=>x.id===r.hospitalId); alert('Alerts sent:\n'+window._lastMatches.slice(0,5).map(m=>'• '+m.d.name+' – '+r.group+' @ '+(h?h.name:'')).join('\n')); log('Alerts for '+r.id); renderEmergency(); }
+function doTransfer(){ const from=banks.find(b=>b.id===document.getElementById('tFrom').value); const to=banks.find(b=>b.id===document.getElementById('tTo').value); const g=document.getElementById('tGroup').value; const qty=+document.getElementById('tQty').value; if(from.id===to.id){ toast('Different banks'); return; } if((from.stock[g]||0)<qty){ toast('Insufficient stock'); return; } from.stock[g]-=qty; to.stock[g]=(to.stock[g]||0)+qty; edges.push({from:from.id, rel:'TRANSFERRED_TO', to:to.id, w:5}); log('Transfer '+g+' x'+qty); closeModal('transferModal'); renderInventory(); toast('Transfer done'); }
+function addCampaign(){ const c={id:nextId('C'), name:document.getElementById('cName').value, bankId:document.getElementById('cBank').value, status:'ACTIVE', targets:[document.getElementById('cGroup').value]}; campaigns.push(c); edges.push({from:c.id, rel:'HELD_AT', to:c.bankId, w:0}); log('Campaign '+c.id); closeModal('campaignModal'); renderCampaigns(); toast('Campaign created'); }
+function smartRecommend(){ const inv=systemStock(); const crit=GROUPS.filter(g=>inv[g]<=5); alert(crit.length?'Targets: '+crit.join(', '):'Stocks healthy'); }
+function findPath(){
+  const from = document.getElementById('pathFrom').value;
+  const to = document.getElementById('pathTo').value;
+  if(!from || !to){ toast('Select from and to'); return; }
+  if(from === to){
+    highlightPath = new Set([from]);
+    highlightPathEdges = new Set();
+    lastPathWeight = 0;
+    document.getElementById('pathResult').textContent = 'Same node. Weight = 0';
+    drawGraph();
+    return;
+  }
+  // Dijkstra on directed weighted edges
+  const nodes = new Set();
+  gNodes.forEach(n => nodes.add(n.id));
+  const adj = {};
+  nodes.forEach(id => adj[id] = []);
+  edges.forEach(e => {
+    const w = (typeof e.w === 'number' && e.w > 0) ? e.w : 0.01; // tiny weight for logical edges
+    if(adj[e.from]) adj[e.from].push({to:e.to, w:w, rel:e.rel});
+  });
+  const dist = {}, prev = {}, prevEdge = {};
+  nodes.forEach(id => { dist[id] = Infinity; });
+  dist[from] = 0;
+  const pq = [{id:from, d:0}];
+  const settled = new Set();
+  while(pq.length){
+    pq.sort((a,b)=>a.d-b.d);
+    const cur = pq.shift();
+    if(settled.has(cur.id)) continue;
+    settled.add(cur.id);
+    if(cur.id === to) break;
+    (adj[cur.id]||[]).forEach(edge => {
+      if(settled.has(edge.to)) return;
+      const alt = dist[cur.id] + edge.w;
+      if(alt < dist[edge.to]){
+        dist[edge.to] = alt;
+        prev[edge.to] = cur.id;
+        prevEdge[edge.to] = cur.id + '->' + edge.to;
+        pq.push({id:edge.to, d:alt});
+      }
+    });
+  }
+  if(dist[to] === Infinity){
+    highlightPath = new Set();
+    highlightPathEdges = new Set();
+    lastPathWeight = 0;
+    document.getElementById('pathResult').textContent = 'No directed path found from ' + from + ' to ' + to;
+    drawGraph();
+    toast('No path');
+    return;
+  }
+  // reconstruct
+  const path = [];
+  const edgeKeys = [];
+  for(let cur = to; cur; cur = prev[cur]){
+    path.unshift(cur);
+    if(prevEdge[cur]) edgeKeys.unshift(prevEdge[cur]);
+    if(cur === from) break;
+  }
+  highlightPath = new Set(path);
+  highlightPathEdges = new Set(edgeKeys);
+  lastPathWeight = dist[to];
+  document.getElementById('pathResult').textContent =
+    'Dijkstra path (total weight ' + lastPathWeight.toFixed(2) + ' km):  ' + path.join('  →  ');
+  drawGraph();
+  toast('Path weight = ' + lastPathWeight.toFixed(2));
+}
+
+
+function openManualMap(){
+  const rid=selectedEmRequest||selectedRequest;
+  if(!rid){ toast('Select a request first'); return; }
+  selectedEmRequest=rid;
+  const r=requests.find(x=>x.id===rid);
+  if(!r){ toast('Request not found'); return; }
+  const h=hospitals.find(x=>x.id===r.hospitalId);
+  document.getElementById('mmRequest').value = r.id+' | '+r.group+' x'+r.qty+' | '+(h?h.name:r.hospitalId)+' | '+r.status;
+  // All eligible + compatible donors (not sorted by score — full list for manual choice)
+  const list=donors.filter(d=>d.eligible&&d.emergency&&(canDonate[d.group]||[]).includes(r.group));
+  if(!list.length){ toast('No eligible compatible donors'); return; }
+  const hLat=h?h.lat:0, hLon=h?h.lon:0;
+  document.getElementById('mmDonor').innerHTML=list.map(d=>{
+    const distance=dist(d.lat,d.lon,hLat,hLon).toFixed(1);
+    return '<option value="'+d.id+'">'+d.name+' ('+d.id+') | '+d.group+' | '+distance+' km | rel '+d.reliability+'%</option>';
+  }).join('');
+  openModal('manualMapModal');
+}
+function confirmManualMap(){
+  if(!selectedEmRequest){ toast('No request selected'); return; }
+  const donorId=document.getElementById('mmDonor').value;
+  const d=donors.find(x=>x.id===donorId);
+  const r=requests.find(x=>x.id===selectedEmRequest);
+  if(!d||!r){ toast('Invalid selection'); return; }
+  r.status='MATCHED';
+  edges.push({from:d.id, rel:'ACCEPTED', to:r.id, w:0});
+  // mild reliability bump on manual map accept
+  d.reliability=Math.min(100, (d.reliability||70)+1);
+  log('Manual map: donor '+d.id+' ('+d.name+') → request '+r.id);
+  closeModal('manualMapModal');
+  renderEmergency();
+  toast('Mapped '+d.name+' to request '+r.id);
+}
+
+
+function matchFromRequests(){
+  if(!selectedRequest){ toast('Select a request in the table first'); return; }
+  selectedEmRequest = selectedRequest;
+  // switch to matching panel and run match
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector('[data-panel="emergency"]');
+  if(btn){ btn.classList.add('active'); }
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('emergency').classList.add('active');
+  renderEmergency();
+  matchDonors();
+  toast('Matching donors for request '+selectedRequest+' ('+(requests.find(x=>x.id===selectedRequest)||{}).urgency+')');
+}
+
+rebuildNodes(); refreshDashboard(); renderDonors(); renderHospitals(); renderInventory(); renderRequests(); renderEmergency(); renderCampaigns(); renderAudit(); runAnalytics();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+BLOODCONNECT OOP CONCEPT MAP
+
+Packages: app, model, service, exception, util.
+Inheritance: Entity -> Donor, Hospital, BloodBank, Patient, BloodRequest.
+Exception handling: BloodConnectCore/GraphManager try-catch, throw, throws.
+Method overloading: same method name with different parameter lists.
+Method overriding: model subclasses implement/override inherited/interface methods.
+Static members: shared counters, constants and utility methods.
+Interfaces: GraphEntity, Searchable, Notifiable.
+User-defined exceptions: exception package custom exception classes.
+Generics: List<T>, Map<K,V>, generic helper methods.
+Collections/Maps: ArrayList/List, HashMap/Map, EnumMap, Set.
+Threads: MonitorService ScheduledExecutorService background tasks.
+Removed: graph/, GraphNode, GraphEdge, BFS, DFS, Dijkstra.
